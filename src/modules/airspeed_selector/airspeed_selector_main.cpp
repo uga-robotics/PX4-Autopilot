@@ -150,6 +150,8 @@ private:
 
 	perf_counter_t _perf_elapsed{};
 
+	float _airspeed_stall{8.0f};
+
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::ASPD_W_P_NOISE>) _param_west_w_p_noise,
 		(ParamFloat<px4::params::ASPD_SC_P_NOISE>) _param_west_sc_p_noise,
@@ -167,7 +169,7 @@ private:
 		(ParamFloat<px4::params::ASPD_FS_INTEG>) _tas_innov_integ_threshold, /**< innovation check integrator threshold */
 		(ParamInt<px4::params::ASPD_FS_T_STOP>) _checks_fail_delay, /**< delay to declare airspeed invalid */
 		(ParamInt<px4::params::ASPD_FS_T_START>) _checks_clear_delay, /**<  delay to declare airspeed valid again */
-		(ParamFloat<px4::params::ASPD_STALL>) _airspeed_stall /**<  stall speed*/
+		(ParamFloat<px4::params::FW_AIRSPD_MIN>) _airspeed_min /**<  minimum airspeed, used to approximate stall speed*/
 	)
 
 	void 		init(); 	/**< initialization of the airspeed validator instances */
@@ -240,6 +242,7 @@ AirspeedModule::init()
 	}
 
 	_prev_airspeed_index = _valid_airspeed_index; // used to detect a sensor switching
+	_airspeed_stall = _airspeed_min.get() * 0.6f; // approximate stall speed with 60% of min airspeed
 }
 
 void
@@ -289,6 +292,7 @@ AirspeedModule::Run()
 
 	if (_parameter_update_sub.update(&update)) {
 		update_params();
+		_airspeed_stall = _airspeed_min.get() * 0.6f; // approximate stall speed with 60% of min airspeed
 	}
 
 
@@ -341,7 +345,7 @@ AirspeedModule::Run()
 				input_data.air_temperature_celsius = airspeed_raw.air_temperature_celsius;
 
 				// takeoff situation is active from start till one of the sensors' IAS or groundspeed_CAS is above stall speed
-				if (airspeed_raw.indicated_airspeed_m_s > _airspeed_stall.get() || _ground_minus_wind_CAS > _airspeed_stall.get()) {
+				if (airspeed_raw.indicated_airspeed_m_s > _airspeed_stall || _ground_minus_wind_CAS > _airspeed_stall) {
 					_in_takeoff_situation = false;
 				}
 
@@ -402,7 +406,7 @@ void AirspeedModule::update_params()
 		_airspeed_validator[i].set_tas_innov_integ_threshold(_tas_innov_integ_threshold.get());
 		_airspeed_validator[i].set_checks_fail_delay(_checks_fail_delay.get());
 		_airspeed_validator[i].set_checks_clear_delay(_checks_clear_delay.get());
-		_airspeed_validator[i].set_airspeed_stall(_airspeed_stall.get());
+		_airspeed_validator[i].set_airspeed_stall(_airspeed_stall);
 	}
 
 	// if the airspeed scale estimation is enabled and the airspeed is valid,
